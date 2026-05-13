@@ -1,6 +1,6 @@
 module github.com/luxfi/staking
 
-go 1.26.1
+go 1.26.3
 
 require (
 	github.com/luxfi/constants v1.4.7
@@ -17,7 +17,7 @@ require (
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/crypto v1.17.45 // indirect
 	github.com/luxfi/geth v1.16.79 // indirect
-	github.com/luxfi/math v1.2.4 // indirect
+	github.com/luxfi/math v1.4.0 // indirect
 	github.com/luxfi/math/big v0.1.0 // indirect
 	github.com/luxfi/metric v1.5.1 // indirect
 	github.com/luxfi/mock v0.1.1 // indirect
