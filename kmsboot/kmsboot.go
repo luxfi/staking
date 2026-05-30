@@ -1,18 +1,30 @@
 // Copyright (C) 2019-2026, Lux Industries Inc. All rights reserved.
 // See the file LICENSE for licensing terms.
 
-// Package kmsboot is the canonical boot-time staking-identity loader for
-// any Lux-based validator binary. It fetches three blobs from a KMS
-// service over the native ZAP transport and injects them into argv as
-// the `--staking-{mldsa-key,mldsa-pub-key,signer-key}-file-content`
-// flags that luxfi/node's config layer (and every downstream fork)
-// already consumes. The bytes never touch disk — they live in argv
-// (process memory) for the duration of viper's config parse.
+// Package kmsboot is the canonical boot-time staking-identity loader
+// for any Lux-based validator binary. It fetches three blobs from a
+// KMS service over the native ZAP transport and injects them into
+// argv as the `--staking-{mldsa-key,mldsa-pub-key,signer-key}-file-
+// content` flags that luxfi/node's config layer (and every downstream
+// fork) already consumes. The bytes never touch disk — they live in
+// argv (process memory) for the duration of viper's config parse.
 //
 // One in-cluster KMS, one path template, one env slug. Each validator
 // pod resolves its own StatefulSet ordinal from `POD_NAME` and pulls
-// its own bundle. No K8s Secret, no per-pod file mount, no shared
-// secret material.
+// its own bundle. No K8s Secret, no per-pod file mount.
+//
+// # Policy-neutral
+//
+// kmsboot fetches and injects — nothing else. It does not enforce
+// strict-PQ posture, classical-vs-PQ exclusivity, or any other
+// posture choice. Lux nodes activate all curves and crypto
+// precompiles by default; whether a given chain consumes the
+// classical secp256k1 NodeID or the strict-PQ ML-DSA NodeID is a
+// chain-config decision (genesis `SecurityProfile`, upgrade-config
+// flags) made elsewhere. Classical staking material (mounted from a
+// K8s Secret as `STAKING_TLS_KEY`/`STAKING_TLS_CERT`/
+// `STAKING_SIGNER_KEY`) can coexist freely with the PQ material
+// kmsboot fetches. luxfi/node's config layer merges both.
 //
 // # Quickstart
 //
@@ -29,7 +41,7 @@
 //
 // `Inject` is a no-op (returns argv unchanged) when none of the three
 // trigger envs (`KMS_ADDR`, `KMS_ENV`, `STAKING_KMS_PATH_TEMPLATE`)
-// are set. Any partial config is a hard error.
+// are set.
 //
 // # Addressing
 //
@@ -44,23 +56,18 @@
 //
 // env is NEVER embedded in the path. Conflating location with scope
 // is what makes cross-env isolation a string-substitution convention
-// rather than a property of the KMS access boundary. kmsboot refuses
-// `{env}` in the template at config-validation time.
+// rather than a property of the KMS access boundary.
 //
-// # Strict-PQ posture
+// # Correctness checks (always on)
 //
-// All checks below default ON. They are the load-bearing reason this
-// package exists. Opt-out is via Config.StrictPQ=false but the only
-// caller that should ever do that is a test.
+// kmsboot enforces a minimum set of correctness invariants. These are
+// architectural, not policy:
 //
 //   - All three trigger envs must be set together. Partial = hard fail.
-//   - `{env}` in the path template = hard fail.
+//   - `{env}` in the path template = hard fail (env is a separate KMS
+//     dimension, not a path substring).
 //   - Path template must contain `{ord}` and end with `/` = hard fail.
-//   - Classical-compat envs (STAKING_TLS_KEY/CERT, STAKING_SIGNER_KEY)
-//     present alongside kmsboot config = hard fail. Posture is exclusive.
-//   - Pre-existing `--staking-*-file-content` flag on argv = hard fail.
-//     Caller already provided identity; refuse to overwrite.
-//   - Empty blob from KMS = hard fail. No silent partial registration.
+//   - Empty blob from KMS = hard fail (no silent partial registration).
 //
 // # Test seam
 //
@@ -104,29 +111,7 @@ const (
 	FlagSignerKeyContent   = "--staking-signer-key-file-content"
 )
 
-// ClassicalStakingEnvs names the file-mount path's env vars. Their
-// presence alongside a kmsboot config is a strict-PQ posture violation:
-// you can't have both. Exposed as a package var so a downstream caller
-// can extend (e.g. a fork that introduced its own classical env) — but
-// don't shrink the list unless you understand the implications.
-var ClassicalStakingEnvs = []string{
-	"STAKING_TLS_KEY",
-	"STAKING_TLS_CERT",
-	"STAKING_SIGNER_KEY",
-}
-
-// contentFlagPrefixes are the prefixes Inject refuses to overwrite on
-// argv. If a caller already supplied identity material via flags,
-// kmsboot does NOT silently shadow it.
-var contentFlagPrefixes = []string{
-	FlagMLDSAKeyContent + "=",
-	FlagMLDSAPubKeyContent + "=",
-	FlagSignerKeyContent + "=",
-}
-
-// Config drives one boot-time identity load. All four positional
-// fields are required; StrictPQ defaults to true in [ConfigFromEnv]
-// and should not be flipped in production.
+// Config drives one boot-time identity load.
 type Config struct {
 	// KMSAddr is the KMS endpoint (host:port). Required.
 	KMSAddr string
@@ -148,17 +133,12 @@ type Config struct {
 	// programmatic caller may know the ord by other means and bypass
 	// the env-var path (see [InjectWith]).
 	PodName string
-
-	// StrictPQ refuses classical-compat env coexistence and other
-	// downgrade paths. Defaults to true via [ConfigFromEnv]. Production
-	// must not flip this.
-	StrictPQ bool
 }
 
-// Validate enforces the strict-PQ posture on the static fields of
-// Config (everything except PodName, which is checked at Inject time
-// because programmatic callers might supply the ordinal directly via
-// [InjectWith] without setting PodName).
+// Validate enforces the architectural correctness invariants on the
+// static fields of Config — not posture. (PodName is checked at
+// Inject time because programmatic callers might supply the ordinal
+// directly via [InjectWith] without setting PodName.)
 func (c *Config) Validate() error {
 	if c.KMSAddr == "" {
 		return fmt.Errorf("kmsboot: %s is required", EnvKMSAddr)
@@ -174,7 +154,7 @@ func (c *Config) Validate() error {
 			"kmsboot: %s must contain `{ord}` placeholder AND end with /: %q",
 			EnvPathTemplate, c.PathTemplate)
 	}
-	if c.StrictPQ && strings.Contains(c.PathTemplate, "{env}") {
+	if strings.Contains(c.PathTemplate, "{env}") {
 		return fmt.Errorf(
 			"kmsboot: %s must NOT contain `{env}` — env is a separate KMS dimension "+
 				"carried by %s, not a path substring: %q",
@@ -207,7 +187,6 @@ func ConfigFromEnv() (*Config, error) {
 		KMSEnv:       env,
 		PathTemplate: tpl,
 		PodName:      os.Getenv(EnvPodName),
-		StrictPQ:     true,
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -309,26 +288,6 @@ func InjectWithFetcher(
 		return nil, err
 	}
 
-	if cfg.StrictPQ {
-		for _, k := range ClassicalStakingEnvs {
-			if os.Getenv(k) != "" {
-				return nil, fmt.Errorf(
-					"kmsboot: strict-PQ refuses to coexist with classical-compat env "+
-						"%s; these envs were live during the legacy K8s-Secret mount "+
-						"and must be unset on the ZAP-native pod spec", k)
-			}
-		}
-		for _, a := range argv {
-			for _, p := range contentFlagPrefixes {
-				if strings.HasPrefix(a, p) {
-					return nil, fmt.Errorf(
-						"kmsboot: strict-PQ refuses to overwrite an existing %s on argv",
-						strings.TrimSuffix(p, "="))
-				}
-			}
-		}
-	}
-
 	ord, err := podOrdinal(cfg.PodName)
 	if err != nil {
 		return nil, err
@@ -348,9 +307,10 @@ func InjectWithFetcher(
 		return nil, err
 	}
 
-	// Prepend so a hypothetical override later in argv would win. We
-	// already refused above if a content flag was on argv, so this is
-	// purely about stable argv ordering.
+	// Prepend so a caller-supplied `--staking-*-file-content` later in
+	// argv would win the standard `last-flag-wins` viper/pflag semantics.
+	// kmsboot is policy-neutral: if the operator wants their override
+	// to take precedence over the KMS-fetched bytes, we let it.
 	return append([]string{mldsaKey, mldsaPub, signer}, argv...), nil
 }
 
