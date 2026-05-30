@@ -45,7 +45,6 @@ func happyConfig() *Config {
 		KMSEnv:       "testnet",
 		PathTemplate: "/staking/{ord}/",
 		PodName:      "lqd-2",
-		StrictPQ:     true,
 	}
 }
 
@@ -178,32 +177,62 @@ func TestValidate_TemplateMissingOrdOrSlash(t *testing.T) {
 	}
 }
 
-// TestInjectWithFetcher_RefusesClassicalCompat asserts the strict-PQ
-// posture rejects coexistence with the legacy file-mount envs.
-func TestInjectWithFetcher_RefusesClassicalCompat(t *testing.T) {
-	t.Setenv("STAKING_TLS_KEY", "should-not-be-here")
-	_, err := InjectWithFetcher(context.Background(), happyConfig(),
-		&fakeFetcher{}, []string{})
-	if err == nil {
-		t.Fatal("expected classical-compat coexistence to fail; got nil")
+// TestInjectWithFetcher_AllowsClassicalCoexistence asserts kmsboot is
+// policy-neutral about classical-vs-PQ coexistence. Lux nodes activate
+// all curves by default; the legacy file-mount envs (STAKING_TLS_KEY
+// etc.) can be set alongside KMS-fetched PQ material. luxfi/node's
+// config layer merges both; which one a chain consumes is a chain
+// genesis decision (SecurityProfile), not a kmsboot decision.
+func TestInjectWithFetcher_AllowsClassicalCoexistence(t *testing.T) {
+	t.Setenv("STAKING_TLS_KEY", "classical-cert-bytes")
+	t.Setenv("STAKING_TLS_CERT", "classical-cert-pem")
+	t.Setenv("STAKING_SIGNER_KEY", "classical-bls-bytes")
+
+	cfg := happyConfig()
+	fetcher := &fakeFetcher{
+		store: map[string][]byte{
+			"/staking/2/" + BlobMLDSAKey:    []byte("k"),
+			"/staking/2/" + BlobMLDSAPubKey: []byte("p"),
+			"/staking/2/" + BlobSignerKey:   []byte("s"),
+		},
 	}
-	if !strings.Contains(err.Error(), "refuses to coexist") {
-		t.Fatalf("expected 'refuses to coexist' error, got: %v", err)
+	got, err := InjectWithFetcher(context.Background(), cfg, fetcher, nil)
+	if err != nil {
+		t.Fatalf("classical envs alongside kmsboot must not fail: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("expected 3 PQ content flags, got %d: %v", len(got), got)
 	}
 }
 
-// TestInjectWithFetcher_RefusesOverrideFlag asserts the resolver
-// refuses to overwrite an explicit content flag already on argv. The
-// "user supplied identity" case is real (a one-off run from a laptop
-// with the env still in the shell).
-func TestInjectWithFetcher_RefusesOverrideFlag(t *testing.T) {
-	_, err := InjectWithFetcher(context.Background(), happyConfig(),
-		&fakeFetcher{}, []string{FlagMLDSAKeyContent + "=AAAA"})
-	if err == nil {
-		t.Fatal("expected argv-override to fail; got nil")
+// TestInjectWithFetcher_PrependsBeforeUserOverride asserts kmsboot
+// prepends its content flags so a caller-supplied
+// `--staking-*-file-content` later in argv wins the standard
+// last-flag-wins viper/pflag semantics. Policy-neutral: operator
+// override is respected.
+func TestInjectWithFetcher_PrependsBeforeUserOverride(t *testing.T) {
+	cfg := happyConfig()
+	fetcher := &fakeFetcher{
+		store: map[string][]byte{
+			"/staking/2/" + BlobMLDSAKey:    []byte("from-kms"),
+			"/staking/2/" + BlobMLDSAPubKey: []byte("from-kms-pub"),
+			"/staking/2/" + BlobSignerKey:   []byte("from-kms-signer"),
+		},
 	}
-	if !strings.Contains(err.Error(), "refuses to overwrite") {
-		t.Fatalf("expected 'refuses to overwrite' error, got: %v", err)
+	got, err := InjectWithFetcher(context.Background(), cfg, fetcher,
+		[]string{FlagMLDSAKeyContent + "=USER-OVERRIDE"})
+	if err != nil {
+		t.Fatalf("pre-existing content flag must not fail: %v", err)
+	}
+	if len(got) != 4 {
+		t.Fatalf("expected 3 fetched + 1 user-supplied = 4 entries, got %d: %v",
+			len(got), got)
+	}
+	// Operator override must appear AFTER the kmsboot-injected flags
+	// so it wins under last-flag-wins.
+	last := got[len(got)-1]
+	if last != FlagMLDSAKeyContent+"=USER-OVERRIDE" {
+		t.Errorf("user override not preserved at tail: got %q", last)
 	}
 }
 
@@ -225,31 +254,6 @@ func TestInjectWithFetcher_EmptyBlobFailClosed(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "empty blob") {
 		t.Fatalf("expected 'empty blob' error, got: %v", err)
-	}
-}
-
-// TestInjectWithFetcher_StrictPQOff lets the posture relax (test-only
-// path; production must not flip this) and verifies the classical-
-// compat coexistence + argv-override checks are skipped.
-func TestInjectWithFetcher_StrictPQOff(t *testing.T) {
-	t.Setenv("STAKING_TLS_KEY", "would-fail-under-strict-pq")
-	cfg := happyConfig()
-	cfg.StrictPQ = false
-	fetcher := &fakeFetcher{
-		store: map[string][]byte{
-			"/staking/2/" + BlobMLDSAKey:    []byte("k"),
-			"/staking/2/" + BlobMLDSAPubKey: []byte("p"),
-			"/staking/2/" + BlobSignerKey:   []byte("s"),
-		},
-	}
-	got, err := InjectWithFetcher(context.Background(), cfg, fetcher,
-		[]string{FlagMLDSAKeyContent + "=PRE-EXISTING"})
-	if err != nil {
-		t.Fatalf("StrictPQ=false should bypass coexistence checks: %v", err)
-	}
-	if len(got) != 4 {
-		t.Fatalf("expected 4 argv entries (3 fetched + 1 pre-existing), got %d: %v",
-			len(got), got)
 	}
 }
 
