@@ -5,6 +5,7 @@ go 1.26.3
 require (
 	github.com/luxfi/constants v1.4.7
 	github.com/luxfi/ids v1.2.9
+	github.com/luxfi/kms v1.9.9
 	golang.org/x/crypto v0.49.0
 )
 
@@ -21,7 +22,6 @@ require (
 	github.com/luxfi/container v0.0.4 // indirect
 	github.com/luxfi/crypto v1.19.0 // indirect
 	github.com/luxfi/geth v1.16.79 // indirect
-	github.com/luxfi/kms v1.9.9 // indirect
 	github.com/luxfi/math v1.4.0 // indirect
 	github.com/luxfi/math/big v0.1.0 // indirect
 	github.com/luxfi/mdns v0.1.0 // indirect
