@@ -163,7 +163,7 @@ func TestInjectWithFetcher_FetchErrorPropagates(t *testing.T) {
 type errFetcher struct{ err error }
 
 func (e *errFetcher) Get(_ context.Context, _, _ string) ([]byte, error) { return nil, e.err }
-func (e *errFetcher) Close()                                              {}
+func (e *errFetcher) Close()                                             {}
 
 // TestPodOrdinal — keep the pod-name parser table since various Lux
 // downstream binaries will name their pods differently.
