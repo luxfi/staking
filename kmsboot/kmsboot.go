@@ -34,7 +34,7 @@
 //
 // # Env vars
 //
-//	KMS_ADDR                  KMS host:port (e.g. kms:9999).
+//	KMS_ADDR                  KMS host:port (e.g. kms.lux.svc:9999).
 //	                          Empty = kmsboot is a no-op.
 //	KMS_ENV                   KMS env slug (used as the env dimension
 //	                          of GetAt). Empty = "".
