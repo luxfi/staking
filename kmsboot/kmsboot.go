@@ -131,7 +131,7 @@ func InjectWithFetcher(ctx context.Context, fetcher Fetcher, argv []string) ([]s
 	return append(flags, argv...), nil
 }
 
-// DefaultFetcher dials a Liquid KMS over native ZAP at the given addr
+// DefaultFetcher dials a KMS over native ZAP at the given addr
 // with the given env scope (env is bound at construction so it can't
 // drift across the connection boundary).
 func DefaultFetcher(ctx context.Context, addr, env string) (Fetcher, error) {
