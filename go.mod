@@ -1,6 +1,6 @@
 module github.com/luxfi/staking
 
-go 1.26.4
+go 1.27.1
 
 require (
 	github.com/luxfi/constants v1.6.2
