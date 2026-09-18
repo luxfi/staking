@@ -228,7 +228,8 @@ github.com/luxfi/validators v1.3.1/go.mod h1:sIQyUZOvXoJ/9/RCOhHSzjumZIoxiqacNOn
 github.com/luxfi/version v1.0.1/go.mod h1:Y5fPkQ2DB0XRBCxgSPXp4ISzL1/jptKnmFknShRJCyg=
 github.com/luxfi/vm v1.2.0 h1:jTwQRHdC9VmyRZTPSn+IqjMju7f6xlxLc6P9CEg+Y2M=
 github.com/luxfi/vm v1.2.0/go.mod h1:qasVIBRerVQuvy9vFGrX3H8X8pPMPG5un/KbZSyq5YY=
-github.com/luxfi/vm v1.3.1/go.mod h1:6YR/uFV2FoofmogQShv+HM7V8alz5rbrQYjp5w0bNVA=
+github.com/luxfi/vm v1.3.1 h1:rLCbygaajehVkUoJ5czwhpUAJaC5J5okq3p+j2QSPSo=
+github.com/luxfi/vm v1.3.1/go.mod h1:uViH3COP8hhCbj42v1MTohkPCDwYQCZanNIOb/StWqY=
 github.com/luxfi/warp v1.24.1/go.mod h1:kRGQDt6EB3oRLYo71aXqnmJuCBVfND3oQ5/2miaLoyg=
 github.com/luxfi/zap v0.7.2 h1:YecWTWNE5PPJXL56sLIkzS8b23bprUwZ5lPAQuLUtTE=
 github.com/luxfi/zap v0.7.2/go.mod h1:1k+nwT+JW802YzuPAuf7CxMSGr/qxvbGgGwi5k6X9Ok=
